@@ -1,0 +1,172 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  region        String?
+  role          String    @default("user")
+  
+  accounts      Account[]
+  sessions      Session[]
+  surveys       Survey[]
+  responses     Response[]
+  badges        Badge[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Region {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  population Int
+  latitude  Float
+  longitude Float
+  createdAt DateTime @default(now())
+  
+  @@index([name])
+}
+
+model Badge {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String
+  icon        String
+  users       User[]
+  createdAt   DateTime @default(now())
+}
+
+model Survey {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  category    String
+  region      String   @default("Gabon")
+  creatorId   String
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  endDate     DateTime
+  
+  creator     User      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  questions   Question[]
+  responses   Response[]
+  statistics  Statistics?
+  
+  @@index([creatorId])
+  @@index([category])
+  @@index([region])
+  @@index([status])
+}
+
+model Question {
+  id        String   @id @default(cuid())
+  surveyId  String
+  text      String
+  type      String   // "single", "multiple", "text", "scale", "rating", "yes_no"
+  order     Int
+  options   String[] @default([])
+  createdAt DateTime @default(now())
+  
+  survey    Survey  @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  answers   Answer[]
+  
+  @@index([surveyId])
+}
+
+model Answer {
+  id         String   @id @default(cuid())
+  questionId String
+  responseId String
+  text       String
+  createdAt  DateTime @default(now())
+  
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  response   Response @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  
+  @@index([questionId])
+  @@index([responseId])
+}
+
+model Response {
+  id        String   @id @default(cuid())
+  surveyId  String
+  userId    String
+  region    String?
+  createdAt DateTime @default(now())
+  
+  survey    Survey  @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers   Answer[]
+  
+  @@unique([surveyId, userId])
+  @@index([surveyId])
+  @@index([userId])
+}
+
+model Statistics {
+  id        String   @id @default(cuid())
+  surveyId  String   @unique
+  totalResponses Int  @default(0)
+  participationRate Float @default(0)
+  trends    String?
+  updatedAt DateTime @updatedAt
+  
+  survey    Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  
+  @@index([surveyId])
+}
+
+model Trend {
+  id        String   @id @default(cuid())
+  title     String
+  category  String
+  score     Float
+  trending  Boolean  @default(false)
+  trend_type String  // "hot", "rising", "falling"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([trending])
+  @@index([category])
+}
