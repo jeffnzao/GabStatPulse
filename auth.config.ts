@@ -5,59 +5,70 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "./lib/prisma";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import {
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  GOOGLE_OAUTH_ENABLED,
+} from "./lib/env";
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
 });
 
-export const authConfig = {
-  adapter: PrismaAdapter(prisma),
-  providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    }),
-    Credentials({
-      async authorize(credentials) {
-        const validatedCredentials = loginSchema.safeParse(credentials);
-        if (!validatedCredentials.success) return null;
+// Providers actifs selon les clés disponibles
+const providers: NextAuthConfig["providers"] = [
+  Credentials({
+    async authorize(credentials) {
+      const validated = loginSchema.safeParse(credentials);
+      if (!validated.success) return null;
 
+      try {
         const user = await prisma.user.findUnique({
-          where: { email: validatedCredentials.data.email },
+          where: { email: validated.data.email },
         });
 
         if (!user || !user.password) return null;
 
-        const passwordMatch = await bcrypt.compare(
-          validatedCredentials.data.password,
+        const match = await bcrypt.compare(
+          validated.data.password,
           user.password
         );
+        if (!match) return null;
 
-        if (!passwordMatch) return null;
+        return { id: user.id, email: user.email, name: user.name, image: user.image };
+      } catch {
+        console.warn("[AUTH] Database unavailable during authorize — returning null");
+        return null;
+      }
+    },
+  }),
+];
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-        };
-      },
-    }),
-  ],
+// Google OAuth uniquement si les vraies clés sont configurées
+if (GOOGLE_OAUTH_ENABLED) {
+  providers.push(
+    Google({
+      clientId: GOOGLE_CLIENT_ID,
+      clientSecret: GOOGLE_CLIENT_SECRET,
+    })
+  );
+}
+
+export const authConfig = {
+  adapter: PrismaAdapter(prisma),
+  providers,
+  session: { strategy: "jwt" },
   pages: {
     signIn: "/auth/signin",
-    signUp: "/auth/signup",
   },
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
+      if (user) token.id = user.id;
       return token;
     },
     async session({ session, token }) {
-      if (session.user) {
+      if (session.user && token.id) {
         session.user.id = token.id as string;
       }
       return session;

@@ -1,68 +1,79 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { prisma, isDatabaseConnected } from "@/lib/prisma";
 import { z } from "zod";
 
 const SignUpSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
   password: z.string().min(6),
+  // Champ hérité
   region: z.string().optional(),
+  // Nouveaux champs de localisation
+  country: z.string().optional(),
+  residesInGabon: z.boolean().optional().default(false),
+  province: z.string().optional(),
+  ville: z.string().optional(),
+  commune: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const validatedData = SignUpSchema.parse(body);
+    const data = SignUpSchema.parse(body);
 
-    // Check if user exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: validatedData.email },
-    });
-
-    if (existingUser) {
-      return NextResponse.json(
-        { error: "User already exists" },
-        { status: 400 }
-      );
+    const dbOk = await isDatabaseConnected();
+    if (!dbOk) {
+      if (process.env.NODE_ENV === "development") {
+        return NextResponse.json(
+          {
+            id: "mock-" + Date.now(),
+            email: data.email,
+            name: data.name,
+            _mock: true,
+            message: "Mode développement — inscription simulée",
+          },
+          { status: 201 }
+        );
+      }
+      return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(validatedData.password, 10);
+    const existing = await prisma.user.findUnique({ where: { email: data.email } });
+    if (existing) {
+      return NextResponse.json({ error: "User already exists" }, { status: 400 });
+    }
 
-    // Create user
+    const hashed = await bcrypt.hash(data.password, 10);
+
+    // Dériver region depuis province ou ville pour la compatibilité
+    const legacyRegion = data.province || data.ville || data.region;
+
     const user = await prisma.user.create({
       data: {
-        name: validatedData.name,
-        email: validatedData.email,
-        password: hashedPassword,
-        region: validatedData.region,
+        name: data.name,
+        email: data.email,
+        password: hashed,
+        region: legacyRegion,
+        country: data.country,
+        residesInGabon: data.residesInGabon ?? false,
+        province: data.province,
+        ville: data.ville,
+        commune: data.commune,
         emailVerified: new Date(),
       },
     });
 
-    // Create observer badge for new user
-    const observerBadge = await prisma.badge.findUnique({
-      where: { name: "Observateur" },
-    });
-
-    if (observerBadge) {
+    const badge = await prisma.badge.findUnique({ where: { name: "Observateur" } });
+    if (badge) {
       await prisma.user.update({
         where: { id: user.id },
-        data: {
-          badges: {
-            connect: { id: observerBadge.id },
-          },
-        },
+        data: { badges: { connect: { id: badge.id } } },
       });
     }
 
     return NextResponse.json(
-      {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      },
+      { id: user.id, email: user.email, name: user.name },
       { status: 201 }
     );
   } catch (error) {
@@ -72,11 +83,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-
-    console.error("Error signing up:", error);
-    return NextResponse.json(
-      { error: "Failed to sign up" },
-      { status: 500 }
-    );
+    console.error("[API /auth/signup]", error);
+    return NextResponse.json({ error: "Failed to sign up" }, { status: 500 });
   }
 }

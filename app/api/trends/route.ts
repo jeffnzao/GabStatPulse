@@ -1,53 +1,58 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { prisma, isDatabaseConnected } from "@/lib/prisma";
+import { mockTrends } from "@/lib/mockData";
+
+interface SurveyWithCount {
+  id: string;
+  title: string;
+  category: string;
+  createdAt: Date;
+  _count: { responses: number };
+}
 
 export async function GET() {
   try {
-    // Calculate trending score for surveys
-    const recentSurveys = await prisma.survey.findMany({
+    const dbOk = await isDatabaseConnected();
+
+    if (!dbOk) {
+      return NextResponse.json(mockTrends);
+    }
+
+    const recentSurveys: SurveyWithCount[] = await prisma.survey.findMany({
       where: {
-        createdAt: {
-          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
-        },
+        createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
       },
       include: {
-        _count: {
-          select: { responses: true },
-        },
+        _count: { select: { responses: true } },
       },
     });
 
-    const trends = recentSurveys.map((survey) => {
-      const daysSinceCreation = Math.max(1, Math.floor(
-        (Date.now() - survey.createdAt.getTime()) / (1000 * 60 * 60 * 24)
-      ));
+    const trends = recentSurveys
+      .map((survey: SurveyWithCount) => {
+        const daysSince = Math.max(
+          1,
+          Math.floor((Date.now() - survey.createdAt.getTime()) / (1000 * 60 * 60 * 24))
+        );
+        const score = survey._count.responses * (1 / (daysSince + 1));
+        const trend_type: "hot" | "rising" | "falling" =
+          score > 10 ? "hot" : score > 5 ? "rising" : "falling";
 
-      const responseRate = survey._count.responses / daysSinceCreation;
-      const trendingScore = survey._count.responses * (1 / (daysSinceCreation + 1));
+        return {
+          id: survey.id,
+          title: survey.title,
+          category: survey.category,
+          score,
+          trending: score > 5,
+          trend_type,
+          responseCount: survey._count.responses,
+        };
+      })
+      .sort((a: { score: number }, b: { score: number }) => b.score - a.score)
+      .slice(0, 10);
 
-      let trend_type = "rising";
-      if (trendingScore < 2) trend_type = "falling";
-      else if (trendingScore > 10) trend_type = "hot";
-
-      return {
-        id: survey.id,
-        title: survey.title,
-        category: survey.category,
-        score: trendingScore,
-        trending: trendingScore > 5,
-        trend_type,
-        responseCount: survey._count.responses,
-      };
-    });
-
-    const sortedTrends = trends.sort((a, b) => b.score - a.score).slice(0, 10);
-
-    return NextResponse.json(sortedTrends);
+    return NextResponse.json(trends);
   } catch (error) {
-    console.error("Error fetching trends:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch trends" },
-      { status: 500 }
-    );
+    console.error("[API /trends] Error:", error);
+    return NextResponse.json(mockTrends);
   }
 }

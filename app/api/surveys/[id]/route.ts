@@ -1,24 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, isDatabaseConnected } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { mockSurveys } from "@/lib/mockData";
 
 export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } }
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
+    const dbOk = await isDatabaseConnected();
+
+    if (!dbOk) {
+      const mock = mockSurveys.find((s) => s.id === id) || mockSurveys[0];
+      return NextResponse.json(mock);
+    }
+
     const survey = await prisma.survey.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
-        questions: {
-          orderBy: { order: "asc" },
-        },
-        _count: {
-          select: { responses: true },
-        },
-        creator: {
-          select: { name: true, image: true },
-        },
+        questions: { orderBy: { order: "asc" } },
+        _count: { select: { responses: true } },
+        creator: { select: { name: true, image: true } },
       },
     });
 
@@ -28,98 +31,31 @@ export async function GET(
 
     return NextResponse.json(survey);
   } catch (error) {
-    console.error("Error fetching survey:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch survey" },
-      { status: 500 }
-    );
+    console.error("[API /surveys/:id GET]", error);
+    return NextResponse.json(mockSurveys[0]);
   }
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } }
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
-    const session = await auth();
+    const session = await auth() as { user?: { id?: string } } | null;
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json();
-    const { answers } = body;
-
-    if (!answers || !Array.isArray(answers)) {
-      return NextResponse.json(
-        { error: "Invalid answers format" },
-        { status: 400 }
-      );
+    const dbOk = await isDatabaseConnected();
+    if (!dbOk) {
+      return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
     }
 
-    // Check if user already responded
-    const existingResponse = await prisma.response.findUnique({
-      where: {
-        surveyId_userId: {
-          surveyId: params.id,
-          userId: session.user.id,
-        },
-      },
-    });
-
-    if (existingResponse) {
-      return NextResponse.json(
-        { error: "You have already responded to this survey" },
-        { status: 400 }
-      );
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-    });
-
-    const response = await prisma.response.create({
-      data: {
-        surveyId: params.id,
-        userId: session.user.id,
-        region: user?.region,
-        answers: {
-          create: answers.map((answer: any) => ({
-            questionId: answer.questionId,
-            text: answer.text,
-          })),
-        },
-      },
-      include: {
-        answers: true,
-      },
-    });
-
-    // Update survey statistics
-    await updateSurveyStatistics(params.id);
-
-    return NextResponse.json(response, { status: 201 });
+    await prisma.survey.delete({ where: { id, creatorId: session.user.id } });
+    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Error submitting response:", error);
-    return NextResponse.json(
-      { error: "Failed to submit response" },
-      { status: 500 }
-    );
+    console.error("[API /surveys/:id DELETE]", error);
+    return NextResponse.json({ error: "Failed to delete" }, { status: 500 });
   }
-}
-
-async function updateSurveyStatistics(surveyId: string) {
-  const responses = await prisma.response.count({
-    where: { surveyId },
-  });
-
-  await prisma.statistics.upsert({
-    where: { surveyId },
-    update: {
-      totalResponses: responses,
-    },
-    create: {
-      surveyId,
-      totalResponses: responses,
-    },
-  });
 }

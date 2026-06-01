@@ -52,7 +52,7 @@ interface SelectedRegion {
   name: string;
   population: number;
   problems: string[];
-  stats: { label: string; value: string }[];
+  stats: { label: string; value: string | number }[];
 }
 
 export function GabonMap() {

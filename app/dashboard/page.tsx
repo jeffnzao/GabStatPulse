@@ -4,13 +4,14 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { 
   CustomBarChart, 
   CustomLineChart, 
   CustomPieChart 
 } from "@/components/charts";
 import { motion } from "framer-motion";
-import { BarChart3, TrendingUp, Users, Zap } from "lucide-react";
+import { BarChart3, TrendingUp, Users, Zap, Calendar } from "lucide-react";
 
 interface DashboardStats {
   totalSurveys: number;
@@ -23,7 +24,9 @@ export default function Dashboard() {
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [timeFilter, setTimeFilter] = useState("month");
+  const [timeFilter, setTimeFilter] = useState("30days");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -59,7 +62,7 @@ export default function Dashboard() {
     { name: "Internet", value: 150 },
   ];
 
-  const mockRegionData = stats?.regionStats || [];
+  const mockRegionData = (stats?.regionStats || []).map((r) => ({ name: r.name, value: r.participants }));
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -85,18 +88,70 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-dark-900 pt-20 pb-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
+        {/* Header with Period Selector */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-4xl md:text-5xl font-bold gradient-text mb-4">
-            Tableau de bord
-          </h1>
-          <p className="text-gray-400">
-            Analysez les tendances et statistiques en temps réel
-          </p>
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+              <h1 className="text-4xl md:text-5xl font-bold gradient-text mb-4">
+                Tableau de bord
+              </h1>
+              <p className="text-gray-400">
+                Analysez les tendances et statistiques en temps réel
+              </p>
+            </div>
+
+            {/* Period Selector */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                Période
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: "Aujourd'hui", value: "today" },
+                  { label: "7 jours", value: "7days" },
+                  { label: "30 jours", value: "30days" },
+                  { label: "90 jours", value: "90days" },
+                  { label: "Cette année", value: "year" },
+                  { label: "Personnalisée", value: "custom" },
+                ].map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={timeFilter === option.value ? "primary" : "ghost"}
+                    size="sm"
+                    onClick={() => setTimeFilter(option.value)}
+                    className="text-xs"
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+
+              {/* Custom Date Range */}
+              {timeFilter === "custom" && (
+                <div className="flex gap-2 mt-3">
+                  <Input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    placeholder="Du"
+                    className="h-8 text-xs bg-dark-700 border-dark-600"
+                  />
+                  <Input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    placeholder="Au"
+                    className="h-8 text-xs bg-dark-700 border-dark-600"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
         </motion.div>
 
         {/* KPI Cards */}
@@ -271,14 +326,14 @@ export default function Dashboard() {
                           {region.name}
                         </span>
                         <span className="text-sm text-gray-400">
-                          {region.participants} participants
+                          {region.value} participants
                         </span>
                       </div>
                       <div className="w-full bg-dark-700 rounded-full h-2 overflow-hidden">
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{
-                            width: `${(region.participants / Math.max(...mockRegionData.map(r => r.participants))) * 100}%`,
+                            width: `${(region.value / Math.max(...mockRegionData.map(r => r.value))) * 100}%`,
                           }}
                           transition={{ duration: 0.8, ease: "easeOut" }}
                           className="h-full bg-gradient-to-r from-primary-600 to-accent-600"

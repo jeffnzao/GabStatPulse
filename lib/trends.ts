@@ -1,102 +1,35 @@
-import { prisma } from "@/lib/prisma";
-
 /**
- * Calculate trending score based on:
- * - Number of responses
- * - Recency (newer surveys score higher)
- * - Engagement rate
+ * lib/trends.ts — Calcul des scores de tendance
  */
-export async function calculateTrendingScores() {
-  try {
-    const surveys = await prisma.survey.findMany({
-      include: {
-        _count: {
-          select: { responses: true },
-        },
-      },
-    });
 
-    const trends = surveys.map((survey) => {
-      const now = new Date();
-      const createdAt = new Date(survey.createdAt);
-      const ageInDays = Math.max(1, Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24)));
+interface SurveyForTrend {
+  id: string;
+  title: string;
+  category: string;
+  createdAt: Date;
+  _count: { responses: number };
+}
 
-      // Recency factor (newer = higher score)
-      const recencyFactor = Math.exp(-ageInDays / 10);
-
-      // Response rate factor
-      const responseCount = survey._count.responses;
-      const engagementFactor = Math.log(responseCount + 1);
-
-      // Final trending score
-      const score = (engagementFactor * recencyFactor * 100);
-
-      // Determine trend type
-      let trend_type: "hot" | "rising" | "falling";
-      if (score > 80) {
-        trend_type = "hot";
-      } else if (score > 40) {
-        trend_type = "rising";
-      } else {
-        trend_type = "falling";
-      }
+export function calculateTrends(surveys: SurveyForTrend[]) {
+  return surveys
+    .map((survey: SurveyForTrend) => {
+      const daysSince = Math.max(
+        1,
+        Math.floor((Date.now() - survey.createdAt.getTime()) / (1000 * 60 * 60 * 24))
+      );
+      const score = survey._count.responses * (1 / (daysSince + 1));
+      const trend_type: "hot" | "rising" | "falling" =
+        score > 10 ? "hot" : score > 5 ? "rising" : "falling";
 
       return {
         id: survey.id,
         title: survey.title,
         category: survey.category,
-        score: Math.round(score * 100) / 100,
-        trending: score > 50,
+        score,
+        trending: score > 5,
         trend_type,
-        responseCount,
-        ageInDays,
+        responseCount: survey._count.responses,
       };
-    });
-
-    // Sort by score
-    return trends.sort((a, b) => b.score - a.score);
-  } catch (error) {
-    console.error("Error calculating trending scores:", error);
-    return [];
-  }
-}
-
-/**
- * Get top trending surveys
- */
-export async function getTopTrends(limit: number = 10) {
-  const scores = await calculateTrendingScores();
-  return scores.slice(0, limit);
-}
-
-/**
- * Format trend indicator
- */
-export function getTrendIndicator(trend_type: "hot" | "rising" | "falling"): string {
-  switch (trend_type) {
-    case "hot":
-      return "🔥";
-    case "rising":
-      return "📈";
-    case "falling":
-      return "📉";
-    default:
-      return "📊";
-  }
-}
-
-/**
- * Get trend description
- */
-export function getTrendDescription(trend_type: "hot" | "rising" | "falling"): string {
-  switch (trend_type) {
-    case "hot":
-      return "Sujet chaud";
-    case "rising":
-      return "Monte rapidement";
-    case "falling":
-      return "En baisse";
-    default:
-      return "Normal";
-  }
+    })
+    .sort((a: { score: number }, b: { score: number }) => b.score - a.score);
 }

@@ -11,14 +11,21 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  password      String?
-  image         String?
-  region        String?
-  role          String    @default("user")
+  id             String    @id @default(cuid())
+  name           String?
+  email          String?   @unique
+  emailVerified  DateTime?
+  password       String?
+  image          String?
+  // Champ hérité conservé pour compatibilité
+  region         String?
+  // Localisation étendue
+  country        String?
+  residesInGabon Boolean   @default(false)
+  province       String?
+  ville          String?
+  commune        String?
+  role           String    @default("user")
   
   accounts      Account[]
   sessions      Session[]
@@ -129,19 +136,24 @@ model Answer {
 }
 
 model Response {
-  id        String   @id @default(cuid())
-  surveyId  String
-  userId    String
-  region    String?
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  surveyId      String
+  userId        String?  // Optionnel pour les réponses anonymes
+  anonymousId   String?  // Identifiant pour les utilisateurs anonymes
+  region        String?
+  createdAt     DateTime @default(now())
   
-  survey    Survey  @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  answers   Answer[]
+  survey        Survey  @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  user          User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  answers       Answer[]
   
+  // Un utilisateur connecté ne peut répondre qu'une fois
+  // Un anonymousId ne peut aussi répondre qu'une fois
   @@unique([surveyId, userId])
+  @@unique([surveyId, anonymousId])
   @@index([surveyId])
   @@index([userId])
+  @@index([anonymousId])
 }
 
 model Statistics {

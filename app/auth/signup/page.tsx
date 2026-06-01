@@ -6,38 +6,39 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  LocationFields,
+  defaultLocationData,
+  type LocationData,
+} from "@/components/ui/location-fields";
 import { motion } from "framer-motion";
 
 export default function SignUp() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
     confirmPassword: "",
-    region: "",
   });
 
-  const regions = [
-    "Libreville",
-    "Port-Gentil",
-    "Franceville",
-    "Oyem",
-    "Mouila",
-    "Lambaréné",
-  ];
+  const [location, setLocation] = useState<LocationData>(defaultLocationData);
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -50,37 +51,38 @@ export default function SignUp() {
     }
 
     setLoading(true);
-
     try {
-      const response = await fetch("/api/auth/signup", {
+      const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: formData.name,
           email: formData.email,
           password: formData.password,
-          region: formData.region,
+          country: location.country,
+          residesInGabon: location.residesInGabon,
+          province: location.province,
+          ville: location.ville,
+          commune: location.commune,
         }),
       });
 
-      if (!response.ok) {
-        const data = await response.json();
+      if (!res.ok) {
+        const data = await res.json();
         setError(data.error || "Erreur lors de l'inscription");
         return;
       }
 
-      // Redirect to signin
       router.push("/auth/signin?registered=true");
-    } catch (err) {
+    } catch {
       setError("Une erreur est survenue");
-      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 pt-20">
+    <div className="min-h-screen flex items-center justify-center px-4 pt-20 pb-10">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -105,50 +107,42 @@ export default function SignUp() {
                 </div>
               )}
 
+              {/* Nom */}
               <div className="space-y-2">
                 <Label htmlFor="name">Nom complet</Label>
                 <Input
                   id="name"
                   name="name"
                   type="text"
-                  placeholder="John Doe"
+                  placeholder="Jean Ondoua"
                   value={formData.name}
                   onChange={handleChange}
                   required
                 />
               </div>
 
+              {/* Email */}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   name="email"
                   type="email"
-                  placeholder="john@example.com"
+                  placeholder="jean@example.com"
                   value={formData.email}
                   onChange={handleChange}
                   required
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="region">Région</Label>
-                <select
-                  id="region"
-                  name="region"
-                  value={formData.region}
-                  onChange={handleChange}
-                  className="flex h-10 w-full rounded-md border border-dark-700 bg-dark-800 px-3 py-2 text-base text-gray-100 focus:border-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-600/20"
-                >
-                  <option value="">Sélectionner une région</option>
-                  {regions.map((region) => (
-                    <option key={region} value={region}>
-                      {region}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* ── Localisation (composant réutilisable) ── */}
+              <LocationFields
+                value={location}
+                onChange={setLocation}
+                disabled={loading}
+              />
 
+              {/* Mot de passe */}
               <div className="space-y-2">
                 <Label htmlFor="password">Mot de passe</Label>
                 <Input
@@ -162,8 +156,11 @@ export default function SignUp() {
                 />
               </div>
 
+              {/* Confirmation */}
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirmer le mot de passe</Label>
+                <Label htmlFor="confirmPassword">
+                  Confirmer le mot de passe
+                </Label>
                 <Input
                   id="confirmPassword"
                   name="confirmPassword"
@@ -181,13 +178,16 @@ export default function SignUp() {
                 className="w-full"
                 isLoading={loading}
               >
-                S'inscrire
+                S&apos;inscrire
               </Button>
             </form>
 
             <p className="text-center mt-6 text-gray-400">
               Vous avez déjà un compte ?{" "}
-              <Link href="/auth/signin" className="text-primary-500 hover:underline">
+              <Link
+                href="/auth/signin"
+                className="text-primary-500 hover:underline"
+              >
                 Se connecter
               </Link>
             </p>

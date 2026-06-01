@@ -198,15 +198,17 @@ export default function SurveysPage() {
                           </div>
                         </div>
 
-                        <Button
-                          variant="primary"
-                          className="w-full mt-6"
-                          onClick={(e) => {
-                            e.preventDefault();
-                          }}
-                        >
-                          Participer →
-                        </Button>
+                        <Link href={`/surveys/${survey.id}`} className="block">
+                          <Button
+                            variant="primary"
+                            className="w-full mt-6"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                            }}
+                          >
+                            Participer →
+                          </Button>
+                        </Link>
                       </CardContent>
                     </Card>
                   </Link>

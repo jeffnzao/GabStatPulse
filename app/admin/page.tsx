@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Edit2 } from "lucide-react";
+import { Plus, Trash2, Edit2, Download } from "lucide-react";
 
 export default function AdminPage() {
   const [surveys, setSurveys] = useState<any[]>([]);
@@ -34,12 +35,20 @@ export default function AdminPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="mb-8 flex items-center justify-between"
         >
-          <h1 className="text-4xl md:text-5xl font-bold gradient-text mb-4">
-            Admin Dashboard
-          </h1>
-          <p className="text-gray-400">Gérez les sondages et les utilisateurs</p>
+          <div>
+            <h1 className="text-4xl md:text-5xl font-bold gradient-text mb-4">
+              Admin Dashboard
+            </h1>
+            <p className="text-gray-400">Gérez les sondages et les utilisateurs</p>
+          </div>
+          <Link href="/admin/exports">
+            <Button variant="primary" className="flex items-center gap-2">
+              <Download className="w-4 h-4" />
+              Exports
+            </Button>
+          </Link>
         </motion.div>
 
         {/* Create Survey Section */}
